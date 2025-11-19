@@ -76,6 +76,10 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None):
             logger.error(f"Unsupported media type: {media_type}")
             return False
 
+        time.sleep(20)
+
+        current_url = driver.current_url
+
         # Check for discrepancies if it's a TV show
         discrepant_seasons = {}
         if is_tv_show and normalized_seasons and os.path.exists(DISCREPANCY_REPO_FILE):
@@ -106,98 +110,98 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None):
         # Wait for the movie's details page to load by listening for the status message
         try:
             # Step 1: Check for Status Message
-            try:
-                no_results_element = WebDriverWait(driver, 2).until(
-                    EC.text_to_be_present_in_element(
-                        (By.XPATH, "//div[@role='status' and contains(@aria-live, 'polite')]"),
-                        "No results found"
-                    )
-                )
-                logger.warning("'No results found' message detected. Skipping further checks.")
-                logger.error(f"Could not find {movie_title}, since no results were found.")
-                return False  # Skip further checks if "No results found" is detected
-            except TimeoutException:
-                logger.warning("'No results found' message not detected. Proceeding to check for available torrents.")
+            # try:
+            #     no_results_element = WebDriverWait(driver, 2).until(
+            #         EC.text_to_be_present_in_element(
+            #             (By.XPATH, "//div[@role='status' and contains(@aria-live, 'polite')]"),
+            #             "No results found"
+            #         )
+            #     )
+            #     logger.warning("'No results found' message detected. Skipping further checks.")
+            #     logger.error(f"Could not find {movie_title}, since no results were found.")
+            #     return False  # Skip further checks if "No results found" is detected
+            # except TimeoutException:
+            #     logger.warning("'No results found' message not detected. Proceeding to check for available torrents.")
 
-            try:
-                status_element = WebDriverWait(driver, 2).until(
-                    EC.presence_of_element_located(
-                        (By.XPATH, "//div[@role='status' and contains(@aria-live, 'polite') and contains(text(), 'available torrents in RD')]")
-                    )
-                )
-                status_text = status_element.text
-                logger.info(f"Status message: {status_text}")
+            # try:
+            #     status_element = WebDriverWait(driver, 2).until(
+            #         EC.presence_of_element_located(
+            #             (By.XPATH, "//div[@role='status' and contains(@aria-live, 'polite') and contains(text(), 'available torrents in RD')]")
+            #         )
+            #     )
+            #     status_text = status_element.text
+            #     logger.info(f"Status message: {status_text}")
 
-                # Extract the number of available torrents from the status message (look for the number)
-                import re
-                torrents_match = re.search(r"Found (\d+) available torrents in RD", status_text)
-                if torrents_match:
-                    torrents_count = int(torrents_match.group(1))
-                    logger.info(f"Found {torrents_count} available torrents in RD.")
-                else:
-                    logger.warning("Could not find the expected 'Found X available torrents in RD' message. Proceeding to check for 'Checking RD availability...'.")
-            except TimeoutException:
-                logger.warning("Timeout waiting for the RD status message. Proceeding with the next steps.")
-                status_text = None  # No status message found, but continue
+            #     # Extract the number of available torrents from the status message (look for the number)
+            #     import re
+            #     torrents_match = re.search(r"Found (\d+) available torrents in RD", status_text)
+            #     if torrents_match:
+            #         torrents_count = int(torrents_match.group(1))
+            #         logger.info(f"Found {torrents_count} available torrents in RD.")
+            #     else:
+            #         logger.warning("Could not find the expected 'Found X available torrents in RD' message. Proceeding to check for 'Checking RD availability...'.")
+            # except TimeoutException:
+            #     logger.warning("Timeout waiting for the RD status message. Proceeding with the next steps.")
+            #     status_text = None  # No status message found, but continue
 
-            logger.info("Waiting for 'Checking RD availability...' to appear.")
+            # logger.info("Waiting for 'Checking RD availability...' to appear.")
             
             # Determine if the current URL is for a TV show
-            current_url = driver.current_url
-            is_tv_show = '/show/' in current_url
-            logger.info(f"is_tv_show: {is_tv_show}")
+            # current_url = driver.current_url
+            # is_tv_show = '/show/' in current_url
+            # logger.info(f"is_tv_show: {is_tv_show}")
             # Initialize a set to track confirmed seasons
-            confirmed_seasons = set()
+            # confirmed_seasons = set()
             
             # Step 2: Check if any red buttons (RD 100%) exist and verify the title for each
-            confirmation_flag, confirmed_seasons = check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons, is_tv_show)
+            # confirmation_flag, confirmed_seasons = check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons, is_tv_show)
 
             # Step 3: Wait for the "Checking RD availability..." message to disappear
-            try:
-                WebDriverWait(driver, 5).until_not(
-                    EC.text_to_be_present_in_element(
-                        (By.XPATH, "//div[@role='status' and contains(@aria-live, 'polite')]"),
-                        "Checking RD availability"
-                    )
-                )
-                logger.info("'Checking RD availability...' has disappeared. Now waiting for RD results.")
-            except TimeoutException:
-                logger.warning("'Checking RD availability...' did not disappear within 15 seconds. Proceeding to the next steps.")
+            # try:
+            #     WebDriverWait(driver, 5).until_not(
+            #         EC.text_to_be_present_in_element(
+            #             (By.XPATH, "//div[@role='status' and contains(@aria-live, 'polite')]"),
+            #             "Checking RD availability"
+            #         )
+            #     )
+            #     logger.info("'Checking RD availability...' has disappeared. Now waiting for RD results.")
+            # except TimeoutException:
+            #     logger.warning("'Checking RD availability...' did not disappear within 15 seconds. Proceeding to the next steps.")
 
             # Step 4: Wait for the "Found X available torrents in RD" message
-            try:
-                status_element = WebDriverWait(driver, 3).until(
-                    EC.presence_of_element_located(
-                        (By.XPATH, "//div[@role='status' and contains(@aria-live, 'polite') and contains(text(), 'available torrents in RD')]")
-                    )
-                )
+            # try:
+            #     status_element = WebDriverWait(driver, 3).until(
+            #         EC.presence_of_element_located(
+            #             (By.XPATH, "//div[@role='status' and contains(@aria-live, 'polite') and contains(text(), 'available torrents in RD')]")
+            #         )
+            #     )
 
-                status_text = status_element.text
-                logger.info(f"Status message: {status_text}")
-            except TimeoutException:
-                logger.warning("Timeout waiting for the RD status message. Proceeding with the next steps.")
-                status_text = None  # No status message found, but continue
+            #     status_text = status_element.text
+            #     logger.info(f"Status message: {status_text}")
+            # except TimeoutException:
+            #     logger.warning("Timeout waiting for the RD status message. Proceeding with the next steps.")
+            #     status_text = None  # No status message found, but continue
 
             # Step 5: Extract the number of available torrents from the status message (look for the number)
-            torrents_count = 0
-            if status_text:
-                torrents_match = re.search(r"Found (\d+) available torrents in RD", status_text)
+            # torrents_count = 0
+            # if status_text:
+            #     torrents_match = re.search(r"Found (\d+) available torrents in RD", status_text)
 
-                if torrents_match:
-                    torrents_count = int(torrents_match.group(1))
-                    logger.info(f"Found {torrents_count} available torrents in RD.")
-                else:
-                    logger.warning("Could not find the expected 'Found X available torrents in RD' message. Proceeding to check for Instant RD.")
-                    torrents_count = 0  # Default to 0 torrents if no match found
-            else:
-                logger.warning("No status text available. Proceeding to check for Instant RD.")
-                torrents_count = 0  # Default to 0 torrents if no status text
+            #     if torrents_match:
+            #         torrents_count = int(torrents_match.group(1))
+            #         logger.info(f"Found {torrents_count} available torrents in RD.")
+            #     else:
+            #         logger.warning("Could not find the expected 'Found X available torrents in RD' message. Proceeding to check for Instant RD.")
+            #         torrents_count = 0  # Default to 0 torrents if no match found
+            # else:
+            #     logger.warning("No status text available. Proceeding to check for Instant RD.")
+            #     torrents_count = 0  # Default to 0 torrents if no status text
 
             # Step 6: If the status says "0 torrents", check if there's still an Instant RD button
-            if torrents_count == 0:
-                logger.warning("No torrents found in RD according to status, but checking for Instant RD buttons.")
-            else:
-                logger.info(f"{torrents_count} torrents found in RD. Proceeding with RD checks.")
+            # if torrents_count == 0:
+            #     logger.warning("No torrents found in RD according to status, but checking for Instant RD buttons.")
+            # else:
+            #     logger.info(f"{torrents_count} torrents found in RD. Proceeding with RD checks.")
                 
             # Initialize a set to track confirmed seasons
             confirmed_seasons = set()
@@ -241,16 +245,9 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None):
 
                             # Navigate to the new URL
                             driver.get(season_url)
-                            time.sleep(1)  # Wait for the page to load
+                            time.sleep(10)  # Wait for the page to load
                             logger.info(f"Navigated to season {season} URL: {season_url}")
 
-                            # Perform red button checks for the current season
-                            confirmation_flag, confirmed_seasons = check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons, is_tv_show)
-                            # If a red button is confirmed, skip further processing for this season
-                            if confirmation_flag and is_tv_show:
-                                logger.success(f"Red button confirmed for {season}. Skipping further processing for this season.")
-                                continue
-                                
                             try:
                                 click_show_more_results(driver, logger)
                             except TimeoutException:
@@ -258,7 +255,16 @@ def search_on_debrid(imdb_id, movie_title, media_type, driver, extra_data=None):
                             except Exception as e:
                                 logger.error(f"Unexpected error in click_show_more_results: {e}")
                                 continue  
-                                
+                            
+                            time.sleep(30)
+
+                            # Perform red button checks for the current season
+                            confirmation_flag, confirmed_seasons = check_red_buttons(driver, movie_title, normalized_seasons, confirmed_seasons, is_tv_show)
+                            # If a red button is confirmed, skip further processing for this season
+                            if confirmation_flag and is_tv_show:
+                                logger.success(f"Red button confirmed for {season}. Skipping further processing for this season.")
+                                continue
+                            
                             # Re-locate the result boxes after navigating to the new URL
                             try:
                                 result_boxes = WebDriverWait(driver, 5).until(

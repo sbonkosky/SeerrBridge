@@ -19,6 +19,8 @@
 
 🌉 **SeerrBridge** is a browser automation tool that integrates [Jellyseer](https://github.com/Fallenbagel/jellyseerr)/[Overseerr](https://overseerr.dev/) with [Debrid Media Manager](https://github.com/debridmediamanager/debrid-media-manager). It listens to movie requests via Overseerr webhook. It automates the torrent search and download process using Debrid Media Manager via browser automation, which in turn, gets sent to Real-Debrid. This streamlines your media management, making it fast and efficient.
 
+_Heads up: the BridgeBoard dashboard/UI has been removed—the FastAPI service remains fully functional and exposes the same automation features via API and logs._
+
 <details>
 <summary>🛠️ Why SeerrBridge?</summary>
 
@@ -60,29 +62,6 @@ Example:
 - **Error Handling & Logging**: Provides comprehensive logging and error handling to ensure smooth operation.
   
 - **Setting Custom Regex / Filter in Settings**: Upon launch, the script automates the addition of a regex filter which can be updated in code.
-</details>
-
-<details>
-<summary>🌉 BridgeBoard (SeerrBridge Dashboard) - NEW FEATURE🌟</summary>
-
-## What is BridgeBoard?
-
-BridgeBoard is a sleek, modern web dashboard that complements the SeerrBridge application, providing a visual interface to monitor and manage your media automation:
-![image](https://github.com/user-attachments/assets/0f49edb0-0ade-4c40-9dbd-3c65d542091b)
-
-- **Status Monitoring**: View the current status of SeerrBridge and your movie / TV show requests.
-- **TV Show Subscription Tracking**: Monitor your subscribed shows, their episode status, and unsubscribe.
-- **Log Configurator**: Manage how SeerrBridge logs are displayed within the dashboard, and where.
-you can create custom log types, regex patterns, and fully manage how logs are processed in the app.
-The app comes with a preset [logs_config.json](https://github.com/Woahai321/SeerrBridge/blob/main/logs/log_config.json), but you can configure logs anyway you like. We may adjust this from time to time.
-- **Request History**: Access historical data of all processed requests and logs via the Log Configurator.
-- **Notifications**: Monitor SeerrBridge processing within Discord via a webhook notification.
-- **Environment Variable Management**: You can manage variables within the application settings and save directly to your .env.
-- **Preset & Custom Regex**: Within settings, you can select from pre-defined regex patterns, make custom ones, and or use the regex builder to create a new custom regex based on your preferences.
-
-BridgeBoard connects directly to your SeerrBridge instance via API, providing a user-friendly way to interact with and monitor your media automation without having to check logs or use command line tools.
-
-To access BridgeBoard, navigate to `http://localhost:3777` after starting both containers with Docker Compose, or running it manually.
 </details>
 
 <details>
@@ -247,48 +226,12 @@ Configure your webhook as mentioned above so SeerrBridge can ingest and process 
    ```
 3. **Run the application**:
    ```bash
-   python seerrbridge.py
+   python main.py
    ```
-
-### BridgeBoard (Dashboard) Setup
-
-To run the BridgeBoard dashboard locally:
-
-1. **Ensure you have Node.js v20 or newer installed**:
-   ```bash
-   node --version
-   # Should show v20.x.x or higher
-   ```
-   If you need to install or update Node.js, visit [nodejs.org](https://nodejs.org/).
-
-2. **Navigate to the project directory**:
-   ```bash
-   cd SeerrBridge
-   ```
-
-3. **Install Node.js dependencies**:
-   ```bash
-   npm install
-   ```
-
-4. **Build the dashboard**:
-   ```bash
-   npm run build
-   ```
-
-5. **Start the BridgeBoard dashboard**:
-   ```bash
-   npm start
-   ```
-
-6. **Access the dashboard** at [http://localhost:3777](http://localhost:3777)
-
-
----
 
 ### 🐳 Docker Support
 
-SeerrBridge consists of two components: the main application (seerrbridge) and an optional dashboard (bridgeboard). The recommended way to run them is using Docker Compose with the pre-built images.
+SeerrBridge now ships only as the FastAPI automation service. You can run it on its own by using the provided Docker image or composing it yourself.
 
 ## Prerequisites
 - Docker and Docker Compose installed on your system
@@ -296,7 +239,7 @@ SeerrBridge consists of two components: the main application (seerrbridge) and a
 
 ### Quick Start with Docker Compose
 
-1. **Create a docker-compose.yml file**:
+1. **Use the provided docker-compose.yml** (identical to the file in this repo):
 
 ```yaml
 services:
@@ -317,29 +260,6 @@ services:
         echo 'Starting SeerrBridge with refreshed env' &&
         uvicorn main:app --host 0.0.0.0 --port 8777
       "
-    networks:
-      - seerrbridge_network
-
-  bridgeboard:
-    image: ghcr.io/woahai321/bridgeboard:latest
-    container_name: bridgeboard
-    ports:
-      - "3777:3777"
-    env_file:
-      - ./.env
-    volumes:
-      - shared_logs:/app/logs
-      - ./.env:/app/.env
-    environment:
-      - SEERRBRIDGE_URL=http://seerrbridge:8777
-      - SEERRBRIDGE_LOG_PATH=/logs/seerrbridge.log
-    entrypoint: >
-      sh -c "
-        npm start
-      "
-    restart: unless-stopped
-    depends_on:
-      - seerrbridge
     networks:
       - seerrbridge_network
 
@@ -376,22 +296,21 @@ MAX_EPISODE_SIZE=0
 docker compose pull
 ```
 
-4. **Start the containers**:
+4. **Start the container**:
 
 ```bash
 docker compose up -d
 ```
 
-5. **Access the applications**:
+5. **Access the API**:
    - SeerrBridge API: [http://localhost:8777](http://localhost:8777)
-   - BridgeBoard Dashboard: [http://localhost:3777](http://localhost:3777)
 
 ### Configuration Notes
 
-- **Volumes**: The configuration creates a `config` directory to persist SeerrBridge data
-- **Networks**: Both containers are placed on the same network so they can communicate
-- **Environment Variables**: The bridgeboard container is configured to connect to the seerrbridge container using the internal Docker network
-- **Restart Policy**: Containers will restart automatically unless manually stopped
+- **Volumes**: `/app/logs` is persisted so historical logs remain available across restarts.
+- **Networks**: The default bridge network allows Overseerr/Jellyseerr containers to reach SeerrBridge.
+- **Environment Variables**: Bind-mounting `.env` allows container restarts to pick up changes automatically.
+- **Restart Policy**: The container will restart automatically unless manually stopped.
 ---
 
 ***IF YOU ARE USING OVERSEERR IN DOCKER AND SEERRBRIDGE IN DOCKER, YOUR WEBHOOK IN OVERSEERR NEEDS TO BE THE DOCKER CONTAINER IP***

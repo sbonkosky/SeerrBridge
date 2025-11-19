@@ -10,9 +10,6 @@ import json
 import time
 
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from loguru import logger
 import uvicorn

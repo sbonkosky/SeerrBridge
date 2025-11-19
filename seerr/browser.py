@@ -362,7 +362,7 @@ def login(driver):
         # Log any other unexpected exception
         logger.error(f"An unexpected error occurred during login: {ex}")
 
-def click_show_more_results(driver, logger, max_attempts=3, wait_between=3, initial_timeout=5, subsequent_timeout=5):
+def click_show_more_results(driver, logger, max_attempts=3, wait_between=5, initial_timeout=5, subsequent_timeout=5):
     """
     Attempts to click the 'Show More Results' button multiple times with waits in between.
     
