@@ -27,23 +27,18 @@ OVERSEERR_API_BASE_URL = None
 OVERSEERR_API_KEY = None
 TRAKT_API_KEY = None
 HEADLESS_MODE = True
-ENABLE_AUTOMATIC_BACKGROUND_TASK = False
-ENABLE_SHOW_SUBSCRIPTION_TASK = False
-TORRENT_FILTER_REGEX = None
 MAX_MOVIE_SIZE = None
 MAX_EPISODE_SIZE = None
-REFRESH_INTERVAL_MINUTES = 60.0
-DISCREPANCY_REPO_FILE = "logs/episode_discrepancies.json"
+JOB_INTERVAL_SECONDS = 180
 
 # Add a global variable to track start time
 START_TIME = datetime.now()
 
-def load_config(override=False):
+def load_config(override: bool = False):
     """Load configuration from environment variables"""
     global RD_ACCESS_TOKEN, RD_REFRESH_TOKEN, RD_CLIENT_ID, RD_CLIENT_SECRET
     global OVERSEERR_BASE, OVERSEERR_API_BASE_URL, OVERSEERR_API_KEY, TRAKT_API_KEY
-    global HEADLESS_MODE, ENABLE_AUTOMATIC_BACKGROUND_TASK, ENABLE_SHOW_SUBSCRIPTION_TASK
-    global TORRENT_FILTER_REGEX, MAX_MOVIE_SIZE, MAX_EPISODE_SIZE, REFRESH_INTERVAL_MINUTES
+    global HEADLESS_MODE, MAX_MOVIE_SIZE, MAX_EPISODE_SIZE, JOB_INTERVAL_SECONDS
     
     # Load environment variables
     load_dotenv(override=override)
@@ -58,22 +53,17 @@ def load_config(override=False):
     OVERSEERR_API_KEY = os.getenv('OVERSEERR_API_KEY')
     TRAKT_API_KEY = os.getenv('TRAKT_API_KEY')
     HEADLESS_MODE = os.getenv("HEADLESS_MODE", "true").lower() == "true"
-    ENABLE_AUTOMATIC_BACKGROUND_TASK = os.getenv("ENABLE_AUTOMATIC_BACKGROUND_TASK", "false").lower() == "true"
-    ENABLE_SHOW_SUBSCRIPTION_TASK = os.getenv("ENABLE_SHOW_SUBSCRIPTION_TASK", "false").lower() == "true"
-    TORRENT_FILTER_REGEX = os.getenv("TORRENT_FILTER_REGEX")
     MAX_MOVIE_SIZE = os.getenv("MAX_MOVIE_SIZE")
     MAX_EPISODE_SIZE = os.getenv("MAX_EPISODE_SIZE")
-    
-    # Confirm the interval is a valid number.
+
     try:
-        REFRESH_INTERVAL_MINUTES = float(os.getenv("REFRESH_INTERVAL_MINUTES"))
-        min_interval = 1.0  # Minimum interval in minutes
-        if REFRESH_INTERVAL_MINUTES < min_interval:
-            logger.warning(f"REFRESH_INTERVAL_MINUTES ({REFRESH_INTERVAL_MINUTES}) is too small. Setting to minimum interval of {min_interval} minutes.")
-            REFRESH_INTERVAL_MINUTES = min_interval
+        JOB_INTERVAL_SECONDS = int(os.getenv("JOB_INTERVAL_SECONDS", "180"))
+        if JOB_INTERVAL_SECONDS < 60:
+            logger.warning("JOB_INTERVAL_SECONDS too low; using minimum of 60 seconds.")
+            JOB_INTERVAL_SECONDS = 60
     except (TypeError, ValueError):
-        logger.error("REFRESH_INTERVAL_MINUTES environment variable is not a valid number. Using default of 60 minutes.")
-        REFRESH_INTERVAL_MINUTES = 60.0
+        logger.error("JOB_INTERVAL_SECONDS is not a valid integer. Falling back to 180 seconds.")
+        JOB_INTERVAL_SECONDS = 180
     
     # Validate required configuration
     if not OVERSEERR_API_BASE_URL:

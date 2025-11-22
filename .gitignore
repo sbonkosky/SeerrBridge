@@ -1,0 +1,9 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Optional: test cache
+.pytest_cache/
+
+.env

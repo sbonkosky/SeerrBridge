@@ -46,22 +46,14 @@ Example:
 <summary>🔑 Key Features</summary>
 
 - **Automated Movie Requests**: Automatically processes movie requests from Overseerr and fetches torrents from Debrid Media Manager.
-  
-- **TV Show Subscriptions**: Subscribes to ongoing/currently airing TV shows and automatically tracks individual episode releases.
-  - Automatically fetches individual episodes when **complete season packs** are unavailable.
-  - Tracks previously missed or failed episodes and retries processing them.
-  - Continuously polls on a defined interval to automatically detect and fetch new episodes as they are released.
-  - Fully integrated with **Debrid Media Manager** and **Real-Debrid**.
+- **Automated Job Runner**: A lightweight worker runs every few minutes (and on webhook) to inspect Overseerr/Jellyseerr and fire Selenium searches.
+- **TV & Movie Coverage**: Applies prioritized regex searches, Instant RD buttons, and `RD (100%)` checks to both movies and individual seasons.
 
 - **Debrid Media Manager Integration**: Uses DMM to automate (via browser) torrent search & downloads.
   
 - **Persistent Browser Session**: Keeps a browser session alive using Selenium, ensuring faster and more seamless automation.
-  
-- **Queue Management**: Handles multiple requests with an asynchronous queue, ensuring smooth processing.
-  
+
 - **Error Handling & Logging**: Provides comprehensive logging and error handling to ensure smooth operation.
-  
-- **Setting Custom Regex / Filter in Settings**: Upon launch, the script automates the addition of a regex filter which can be updated in code.
 </details>
 
 <details>
@@ -196,12 +188,9 @@ TRAKT_API_KEY=YOUR_TRAKT_TOKEN
 OVERSEERR_API_KEY=YOUR_OVERSEERR_TOKEN
 OVERSEERR_BASE=https://YOUR_OVERSEERR_URL.COM
 HEADLESS_MODE=true
-ENABLE_AUTOMATIC_BACKGROUND_TASK=false
-ENABLE_SHOW_SUBSCRIPTION_TASK=false
-REFRESH_INTERVAL_MINUTES=120
-TORRENT_FILTER_REGEX=^(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\]).*
 MAX_MOVIE_SIZE=0
 MAX_EPISODE_SIZE=0
+JOB_INTERVAL_SECONDS=180
 ```
 </details>
 
@@ -282,12 +271,9 @@ TRAKT_API_KEY=YOUR_TRAKT_TOKEN
 OVERSEERR_API_KEY=YOUR_OVERSEERR_TOKEN
 OVERSEERR_BASE=https://YOUR_OVERSEERR_URL.COM
 HEADLESS_MODE=true
-ENABLE_AUTOMATIC_BACKGROUND_TASK=true
-ENABLE_SHOW_SUBSCRIPTION_TASK=true
-REFRESH_INTERVAL_MINUTES=120
-TORRENT_FILTER_REGEX=^(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\]).*
 MAX_MOVIE_SIZE=0
 MAX_EPISODE_SIZE=0
+JOB_INTERVAL_SECONDS=180
 ```
 
 3. **Ensure you get the latest image**:
@@ -402,7 +388,7 @@ That's it! Your **SeerrBridge** container should now be up and running. 🚀
 1. **Seerr Webhook**: SeerrBridge listens for movie requests via the configured webhook.
 2. **Automated Search**: It uses Selenium to automate the search for movies on Debrid Media Manager site.
 3. **Torrent Fetching**: Once a matching torrent is found, SeerrBridge automates the Real-Debrid download process.
-4. **Queue Management**: Requests are added to a queue and processed one by one, ensuring smooth and efficient operation.
+4. **Background Job**: Requests are handled by a single background runner that periodically re-checks Overseerr.
 
 If you want to see the automation working in real-time, you can edit the .env and set it to false
 
@@ -413,27 +399,6 @@ This will launch a visible Chrome browser. Be sure not to mess with it while it'
 Example:
 
 ![sb](https://github.com/user-attachments/assets/c6a0ee1e-db07-430c-93cd-f282c8f0888f)
-</details>
-
-<details>
-<summary>📺 TV Show Subscription Feature</summary>
-
-SeerrBridge now includes an exciting **TV Show Subscription** feature that enhances its functionality for ongoing and currently airing TV shows! With this new addition, SeerrBridge takes automated media fetching to the next level:
-
-### 🔧 How It Works:
-- **Episode-Level Automation**: Automatically tracks and fetches **individual episodes** for ongoing TV shows, especially when a **complete season pack** is unavailable.
-- **Smart Subscription System**:
-    - Tracks currently airing episodes and **checks for new releases on a defined interval**.
-    - Handles previously **missed or failed episode downloads**, ensuring nothing gets left behind.
-- **Seamless Integration**: Works flawlessly with **Debrid Media Manager** and **Real-Debrid**, providing uninterrupted automation and caching requested episodes instantly when available.
-- **Fully Automated**: Once subscribed to a show, SeerrBridge manages all episodes for you. No need to manually check for new episodes!
-
-### 🌟 Key Benefits:
-- **Never Miss an Episode**: Perfect for keeping up with currently airing shows where season packs are rare or unavailable during release cycles.
-- **Optimized for Real-Debrid**: Ensures episodes are downloaded as soon as torrents are cached and accessible in your debrid account.
-- **Retry Mechanism**: Any failed episode attempts are logged and automatically retried during the next interval check.
-
-🎉 **This feature ensures you stay up to date on your favorite series—all fully automated!**
 </details>
 
 <details>
@@ -460,118 +425,6 @@ For episodes, possible values are:
 |1|1 GB **(Default)**|
 |3|3 GB|
 |5|5 GB|
-</details>
-
-<details>
-<summary>🎯 Custom Regex Filtering</summary>
-
-This script includes support for **custom regex filtering**, allowing you to filter out unwanted items and refine the results based on specific patterns. The regex is automatically added when the script runs, and you can customize it directly in the code.
-
-### Default Regex
-
-The currently used regex is:
-
-```python
-^(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\]).*
-```
-
-#### What It Does:
-- **Exclude Items with `【...】`**: `(?!.*【.*?】)` removes items with formatted text in this style.
-- **Exclude Cyrillic Characters**: `(?!.*[\u0400-\u04FF])` removes items containing characters from Cyrillic scripts (e.g., Russian text).
-- **Exclude Items with `[esp]`**: `(?!.*\[esp\])` removes items explicitly marked as `[esp]` (often denoting Spanish content).
-- **Match All Other Content**: `.*` ensures the filter applies to the rest of the string.
-
-This is a broad exclusion-based filter that removes unwanted patterns without requiring specific inclusions.
-
----
-
-### Optional Regex (Filtering by Resolution)
-
-If you'd like to refine the filter further to only match items containing **1080p** or **2160p**, you can use the following optional regex:
-
-```python
-^(?=.*(1080p|2160p))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\]).*
-```
-
-#### What It Does:
-- **Include Only Items with `1080p` or `2160p`**: `(?=.*(1080p|2160p))` ensures that only items with these resolutions are processed.
-- The rest of the filter (**exclude `【...】`, Cyrillic characters, or `[esp]`**) works the same as in the default regex.
-
----
-
-### How to Use
-
-To switch between the default and optional regex, simply update the `.env` file:
-
-- **Default Regex**:
-    ```python
-    ^(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\]).*
-    ```
-
-- **Optional Regex**:
-    ```python
-    ^(?=.*(1080p|2160p))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\]).*
-    ```
-
-This gives you flexibility to define what gets filtered, based on your preferred criteria.
-
-
-## 📜 List of Regex Examples
-
-Below is a categorized list of regex patterns for different filtering possibilities.
-
----
-
-### 1. **Current Filter**
-```regex
-^(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\]).*
-```
-
----
-
-### 2. **Current Filter with Resolutions**
-```regex
-^(?=.*(1080p|2160p))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\]).*
-```
-
----
-
-### 3. **Current Filter with Torrent Types**
-```regex
-^(?=.*(Remux|BluRay|BDRip|BRRip))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\]).*
-```
-
----
-
-### 4. **Filter with Both Types and Resolutions**
-```regex
-^(?=.*(1080p|2160p))(?=.*(Remux|BluRay|BDRip|BRRip))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\]).*
-```
-
----
-
-### 5. **Filter for Specific Resolution Only**
-```regex
-^(?=.*(1080p|2160p)).*
-```
-
----
-
-### 6. **Filter for Specific Torrent Types Only**
-```regex
-^(?=.*(Remux|BluRay|BDRip|BRRip)).*
-```
-
----
-
-### 7. **Customizable Regex Template**
-```regex
-^(?=.*(1080p|2160p))?(?=.*(Remux|BluRay|BDRip|BRRip))?(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\]).*
-```
-
----
-
-By selecting one of these patterns, you can tailor the regex filter to fit your exact needs.
 </details>
 
 

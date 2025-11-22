@@ -9,9 +9,19 @@ from loguru import logger
 
 from seerr.config import OVERSEERR_API_BASE_URL, OVERSEERR_API_KEY
 
+AVAILABLE_MEDIA_STATUSES = {4, 5}
+STATUS_LABELS = {
+    1: "UNKNOWN",
+    2: "APPROVED",
+    3: "PROCESSING",
+    4: "PARTIALLY_AVAILABLE",
+    5: "AVAILABLE",
+}
+
 def get_overseerr_media_requests() -> list[dict]:
     """
-    Fetch media requests from Overseerr API
+    Fetch pending media requests from Overseerr.
+    Only requests whose media status is neither AVAILABLE nor PARTIALLY_AVAILABLE are returned.
     
     Returns:
         list[dict]: List of media request objects
@@ -31,16 +41,45 @@ def get_overseerr_media_requests() -> list[dict]:
         data = response.json()
         logger.info(f"Fetched {len(data.get('results', []))} requests from Overseerr")
         
-        if not data.get('results'):
+        results = data.get('results', [])
+        if not results:
             return []
-        
-        # Filter requests that are in processing state (status 3)
-        processing_requests = [item for item in data['results'] if item['status'] == 2 and item['media']['status'] == 3]
-        logger.info(f"Filtered {len(processing_requests)} processing requests")
-        return processing_requests
+
+        pending = []
+        for item in results:
+            media = item.get('media') or {}
+            if media.get('status') in AVAILABLE_MEDIA_STATUSES:
+                continue
+            pending.append(item)
+
+        logger.info(f"Filtered {len(pending)} pending Overseerr request(s).")
+        if pending:
+            summary = _format_pending_summary(pending)
+            logger.info(f"Pending Overseerr media:\n{summary}")
+        return pending
     except Exception as e:
         logger.error(f"Error fetching media requests from Overseerr: {e}")
         return []
+
+def _format_pending_summary(items: List[dict]) -> str:
+    lines = []
+    for item in items:
+        media = item.get("media") or {}
+        media_type = (media.get("mediaType") or "unknown").upper()
+        status_code = media.get("status")
+        status_label = STATUS_LABELS.get(status_code, f"STATUS_{status_code}")
+        title = media.get("title") or media.get("name") or "Untitled"
+        tmdb_id = media.get("tmdbId", "n/a")
+        request_id = item.get("id", "n/a")
+
+        season_suffix = ""
+        if media_type == "TV" and item.get("seasons"):
+            season_numbers = [str(season.get("seasonNumber")) for season in item["seasons"] if season.get("seasonNumber") is not None]
+            if season_numbers:
+                season_suffix = f" | seasons: {', '.join(season_numbers)}"
+
+        lines.append(f"- [{media_type}][{status_label}] {title} (request {request_id}, TMDB {tmdb_id}){season_suffix}")
+    return "\n".join(lines)
 
 def get_media_id_from_request_id(request_id: int) -> Optional[int]:
     """
