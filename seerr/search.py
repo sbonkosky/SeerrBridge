@@ -19,11 +19,21 @@ from seerr.browser import (
 )
 
 SEARCH_PATTERNS = [
-    r"^(?=.*(1080))(?=.*(Remux|BluRay|BDRip|BDRemux|BRRip|WEB-DL))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
-    r"^(?=.*(1080))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
-    r"^(?=.*(Remux|BluRay|BDRip|BRRip|WEB-DL))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
-    r"^(?=.*(Remux|BluRay|BDRip|BRRip|WEB-DL|WEBRip))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
-    r"^(?!.*[\u0400-\u04FF])",
+    [
+        r"^(?=.*(Remux|BluRay|BDRip|BDRemux|BRRip|WEB-DL))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
+        r"^(?=.*(Remux|BluRay|BDRip|BDRemux|BRRip|WEB-DL|WEBRip))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
+    ],
+    [
+        r"^(?=.*(1080))(?=.*(Remux|BluRay|BDRip|BDRemux|BRRip|WEB-DL))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
+        r"^(?=.*(1080))(?=.*(Remux|BluRay|BDRip|BDRemux|BRRip|WEB-DL|WEBRip))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
+    ],
+    [
+        r"^(?=.*(720))(?=.*(Remux|BluRay|BDRip|BDRemux|BRRip|WEB-DL))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
+        r"^(?=.*(720))(?=.*(Remux|BluRay|BDRip|BDRemux|BRRip|WEB-DL|WEBRip))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
+    ],
+    [
+        r"^(?!.*[\u0400-\u04FF])",
+    ],
 ]
 
 
@@ -124,50 +134,53 @@ def _prepare_results_area(active_driver):
 
 
 def _movie_search_loop(active_driver):
-    hundred_found = False
-    clicked = False
-    for search in SEARCH_PATTERNS:
-        logger.debug(f"Searching movie grid with pattern: {search}")
-        try:
-            set_search_query(active_driver, search)
-        except Exception as exc:  # pragma: no cover - Selenium interaction
-            logger.error(f"Failed to type search pattern '{search}': {exc}")
-            continue
-
-        if has_rd_100_result(active_driver):
-            hundred_found = True
-            break
-
-        if click_instant_rd_button(active_driver):
-            clicked = True
-            time.sleep(5)
-            if has_rd_100_result(active_driver):
-                hundred_found = True
-                break
-
-    return hundred_found, clicked
+    return _run_search_tiers(active_driver, whole_season=False)
 
 
 def _show_search_loop(active_driver):
-    hundred_found = False
-    clicked = False
-    for search in SEARCH_PATTERNS:
-        logger.debug(f"Searching show grid with pattern: {search}")
-        try:
-            set_search_query(active_driver, search)
-        except Exception as exc:  # pragma: no cover - Selenium interaction
-            logger.error(f"Failed to type search pattern '{search}': {exc}")
+    return _run_search_tiers(active_driver, whole_season=True)
+
+
+def _run_search_tiers(active_driver, *, whole_season: bool):
+    """
+    Iterate through quality tiers. The first three tiers always run to try gathering
+    multiple versions. The final fallback tier only runs if none of the earlier tiers
+    found a 100% RD match.
+    """
+    clicked_any = False
+    found_any = False
+    total_tiers = len(SEARCH_PATTERNS)
+
+    for tier_index, tier_patterns in enumerate(SEARCH_PATTERNS, start=1):
+        is_fallback_tier = tier_index == total_tiers
+        if is_fallback_tier and found_any:
+            logger.debug("Skipping fallback tier because earlier tiers succeeded.")
             continue
 
-        if has_rd_100_result(active_driver):
-            hundred_found = True
-            break
+        logger.debug(f"Starting search tier {tier_index}/{total_tiers} ({len(tier_patterns)} patterns).")
+        for pattern in tier_patterns:
+            logger.debug(f"Searching grid with pattern: {pattern}")
+            try:
+                set_search_query(active_driver, pattern)
+            except Exception as exc:
+                logger.error(f"Failed to type search pattern '{pattern}': {exc}")
+                continue
 
-        if click_instant_rd_button(active_driver, whole_season=True):
-            clicked = True
-            time.sleep(5)
             if has_rd_100_result(active_driver):
-                hundred_found = True
-                break
+                found_any = True
+                logger.debug(f"Tier {tier_index} produced an RD 100 result without Instant RD click.")
+                break  # move to next tier
 
-    return hundred_found, clicked
+            if click_instant_rd_button(active_driver, whole_season=whole_season):
+                clicked_any = True
+                time.sleep(5)
+                if has_rd_100_result(active_driver):
+                    found_any = True
+                    logger.debug(f"Tier {tier_index} produced an RD 100 result after Instant RD click.")
+                    break
+        else:
+            # Finished this tier without success
+            logger.debug(f"Search tier {tier_index} completed without RD 100 results.")
+            continue
+
+    return found_any, clicked_any
