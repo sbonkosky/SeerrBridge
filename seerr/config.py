@@ -16,6 +16,7 @@ logger.remove()  # Remove default handler
 logger.add("logs/seerrbridge.log", rotation="500 MB", encoding='utf-8')  # Use utf-8 encoding for log file
 logger.add(sys.stdout, colorize=True)  # Ensure stdout can handle Unicode
 logger.level("WARNING", color="<cyan>")
+logger.level("DEBUG", color="<yellow>")
 
 # Initialize variables
 RD_ACCESS_TOKEN = None
