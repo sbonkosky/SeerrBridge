@@ -278,14 +278,14 @@ def click_show_more_results(active_driver, attempts: int = 3, wait_between: int 
         try:
             button = WebDriverWait(active_driver, 5).until(
                 EC.element_to_be_clickable(
-                    (By.XPATH, "//button[contains(@class, 'haptic') and contains(text(), 'Show More Results')]")
+                    (By.XPATH, "//button[contains(text(), 'Show More Results')]")
                 )
             )
             button.click()
             logger.debug(f"Clicked 'Show More Results' ({attempt + 1}/{attempts}).")
             time.sleep(wait_between)
         except TimeoutException:
-            logger.debug(f"No additional results button found on attempt {attempt + 1}.")
+            logger.debug(f"No 'Show More Results' button found on attempt {attempt + 1}.")
             break
         except ElementClickInterceptedException as exc:
             logger.warning(f"Failed to click 'Show More Results': {exc}")

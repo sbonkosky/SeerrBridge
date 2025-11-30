@@ -122,6 +122,14 @@ async def ensure_setup() -> bool:
 
 def _run_once():
     """Fetch pending requests from Overseerr and dispatch the Selenium workflow."""
+    # Re-apply size limits at the start of every job to ensure settings
+    # stay in sync with the configured environment.
+    try:
+        browser_module.apply_size_limits(MAX_MOVIE_SIZE, MAX_EPISODE_SIZE)
+        logger.debug("Re-applied Debrid Media Manager size limits at start of job.")
+    except Exception as exc:
+        logger.error(f"Failed to re-apply size limits at job start: {exc}")
+
     requests = get_overseerr_media_requests()
     if not requests:
         logger.info("No pending Overseerr requests.")

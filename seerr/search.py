@@ -19,17 +19,17 @@ from seerr.browser import (
 )
 
 SEARCH_PATTERNS = [
-    [
-        r"^(?=.*(Remux|BluRay|BDRip|BDRemux|BRRip|WEB-DL))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
-        r"^(?=.*(Remux|BluRay|BDRip|BDRemux|BRRip|WEB-DL|WEBRip))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
-    ],
+    # [
+    #     r"^(?=.*(Remux|BluRay|BDRip|BDRemux|BRRip|WEB-DL))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
+    #     r"^(?=.*(Remux|BluRay|BDRip|BDRemux|BRRip|WEB-DL|WEBRip))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
+    # ],
     [
         r"^(?=.*(1080))(?=.*(Remux|BluRay|BDRip|BDRemux|BRRip|WEB-DL))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
-        r"^(?=.*(1080))(?=.*(Remux|BluRay|BDRip|BDRemux|BRRip|WEB-DL|WEBRip))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
+        r"^(?=.*(1080))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
     ],
     [
         r"^(?=.*(720))(?=.*(Remux|BluRay|BDRip|BDRemux|BRRip|WEB-DL))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
-        r"^(?=.*(720))(?=.*(Remux|BluRay|BDRip|BDRemux|BRRip|WEB-DL|WEBRip))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
+        r"^(?=.*(720))(?!.*【.*?】)(?!.*[\u0400-\u04FF])(?!.*\[esp\])(?!.*2xrus).*",
     ],
     [
         r"^(?!.*[\u0400-\u04FF])",
