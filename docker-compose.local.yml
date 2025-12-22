@@ -11,6 +11,7 @@ services:
     volumes:
       - shared_logs:/app/logs
       - ./.env:/app/.env
+      - ./screenshots:/app/screenshots
     restart: unless-stopped
     command: >
       sh -c "
@@ -18,6 +19,8 @@ services:
         echo 'Starting SeerrBridge with refreshed env' &&
         uvicorn main:app --host 0.0.0.0 --port 8777
       "
+    environment:
+      - SCREENSHOTS_DIR=/app/screenshots
     networks:
       - seerrbridge_network
 

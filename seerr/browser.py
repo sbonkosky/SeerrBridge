@@ -39,6 +39,39 @@ from seerr.config import (
 driver: Optional[webdriver.Chrome] = None
 
 
+def _prune_screenshots(screenshots_dir: str, *, max_keep: int) -> None:
+    if max_keep <= 0:
+        return
+
+    try:
+        entries = []
+        for name in os.listdir(screenshots_dir):
+            if not name.lower().endswith(".png"):
+                continue
+            path = os.path.join(screenshots_dir, name)
+            if not os.path.isfile(path):
+                continue
+            try:
+                entries.append((os.path.getmtime(path), path))
+            except OSError:
+                continue
+
+        # Keep space for the new screenshot we're about to write.
+        target_keep = max(max_keep - 1, 0)
+        if len(entries) <= target_keep:
+            return
+
+        entries.sort(key=lambda item: item[0])  # oldest first
+        to_delete = entries[: max(0, len(entries) - target_keep)]
+        for _, path in to_delete:
+            try:
+                os.remove(path)
+            except OSError:
+                continue
+    except OSError:
+        return
+
+
 def save_debug_screenshot(name: str = "fullpage"):
     """
     Try to capture (almost) the full page in one screenshot by resizing
@@ -46,9 +79,8 @@ def save_debug_screenshot(name: str = "fullpage"):
 
     Returns: full path to the screenshot, or None on failure.
     """
-
-    # remove to take screenshots
-    return None
+    if os.getenv("SCREENSHOTS_ENABLED", "true").lower() != "true":
+        return None
 
     global driver
     if driver is None:
@@ -56,14 +88,17 @@ def save_debug_screenshot(name: str = "fullpage"):
         return None
 
     # Where to save
-    screenshots_dir = os.path.join(os.path.dirname(__file__), "logs", "screenshots")
+    screenshots_dir = os.getenv("SCREENSHOTS_DIR") or os.path.join("logs", "screenshots")
     os.makedirs(screenshots_dir, exist_ok=True)
-
-    import re
-    import math
+    try:
+        max_keep = int(os.getenv("SCREENSHOTS_MAX_KEEP", "10"))
+    except ValueError:
+        max_keep = 10
+    _prune_screenshots(screenshots_dir, max_keep=max_keep)
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    filename = f"{name}_{timestamp}.png"
+    safe_name = "".join(ch if ch.isalnum() else "-" for ch in name.strip().lower())[:80] or "screenshot"
+    filename = f"{safe_name}_{timestamp}.png"
     path = os.path.join(screenshots_dir, filename)
 
     try:
@@ -116,12 +151,16 @@ def _build_chrome_options() -> ChromeOptions:
         platform.system().lower() == "linux"
         and os.getenv("RUNNING_IN_DOCKER", "false").lower() == "true"
     ):
-        # Point to a custom binary only if it actually exists inside the container.
-        chromium_path = "/usr/bin/chromium-browser"
-        if os.path.exists(chromium_path):
-            options.binary_location = chromium_path
+        # Prefer an explicit container-provided Chrome path if available.
+        chrome_bin = os.getenv("CHROME_BIN")
+        if chrome_bin and os.path.exists(chrome_bin):
+            options.binary_location = chrome_bin
         else:
-            logger.debug(f"RUNNING_IN_DOCKER set but {chromium_path} missing; falling back to default Chrome binary.")
+            default_bin = "/usr/bin/google-chrome"
+            if os.path.exists(default_bin):
+                options.binary_location = default_bin
+            else:
+                logger.debug("RUNNING_IN_DOCKER set but no Chrome binary found at CHROME_BIN or /usr/bin/google-chrome.")
     return options
 
 
@@ -187,16 +226,25 @@ async def initialize_browser():
         return driver
 
     options = _build_chrome_options()
-    chromedriver_path = _latest_chromedriver_path()
+    env_driver_path = os.getenv("CHROME_DRIVER_PATH")
 
     try:
-        if chromedriver_path and os.path.exists(chromedriver_path):
-            service = Service(chromedriver_path)
+        if env_driver_path and os.path.exists(env_driver_path):
+            service = Service(env_driver_path)
+            driver = webdriver.Chrome(service=service, options=options)
         else:
-            logger.info("Falling back to webdriver_manager for Chrome driver installation.")
-            service = Service(ChromeDriverManager().install())
-
-        driver = webdriver.Chrome(service=service, options=options)
+            try:
+                # Let Selenium Manager locate/download a matching driver for the installed browser.
+                driver = webdriver.Chrome(options=options)
+            except WebDriverException:
+                chromedriver_path = _latest_chromedriver_path()
+                if chromedriver_path and os.path.exists(chromedriver_path):
+                    service = Service(chromedriver_path)
+                    driver = webdriver.Chrome(service=service, options=options)
+                else:
+                    logger.info("Falling back to webdriver_manager for Chrome driver installation.")
+                    service = Service(ChromeDriverManager().install())
+                    driver = webdriver.Chrome(service=service, options=options)
         driver.execute_cdp_cmd(
             "Page.addScriptToEvaluateOnNewDocument",
             {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"},
@@ -260,16 +308,37 @@ def apply_size_limits(max_movie_size: str, max_episode_size: str):
     if not driver:
         raise RuntimeError("Browser driver is not initialized.")
 
-    driver.get("https://debridmediamanager.com/settings")
-    wait = WebDriverWait(driver, 10)
+    last_exc: Exception | None = None
+    for attempt in range(1, 4):
+        try:
+            driver.get("https://debridmediamanager.com/settings")
+            wait = WebDriverWait(driver, 20)
 
-    movie_select = wait.until(EC.presence_of_element_located((By.ID, "dmm-movie-max-size")))
-    episode_select = wait.until(EC.presence_of_element_located((By.ID, "dmm-episode-max-size")))
+            # If the session needs re-auth, try clicking the login button.
+            try:
+                login_button = WebDriverWait(driver, 3).until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Login with Real Debrid')]"))
+                )
+                login_button.click()
+                logger.info("Clicked 'Login with Real Debrid' from settings page.")
+            except TimeoutException:
+                pass
 
-    Select(movie_select).select_by_value(str(max_movie_size))
-    Select(episode_select).select_by_value(str(max_episode_size))
-    logger.success(f"Applied movie size {max_movie_size} GB and episode size {max_episode_size} GB.")
-    save_debug_screenshot("dmm-settings-applied")
+            movie_select = wait.until(EC.element_to_be_clickable((By.ID, "dmm-movie-max-size")))
+            episode_select = wait.until(EC.element_to_be_clickable((By.ID, "dmm-episode-max-size")))
+
+            Select(movie_select).select_by_value(str(max_movie_size))
+            Select(episode_select).select_by_value(str(max_episode_size))
+            logger.success(f"Applied movie size {max_movie_size} GB and episode size {max_episode_size} GB.")
+            save_debug_screenshot("dmm-settings-applied")
+            return
+        except (TimeoutException, WebDriverException) as exc:
+            last_exc = exc
+            logger.warning(f"Failed to apply size limits (attempt {attempt}/3): {exc!r}")
+            save_debug_screenshot(f"dmm-settings-failed-{attempt}")
+            time.sleep(2)
+
+    raise RuntimeError("Failed to apply size limits after retries.") from last_exc
 
 
 def click_show_more_results(active_driver, attempts: int = 3, wait_between: int = 5):
@@ -307,18 +376,63 @@ def set_search_query(active_driver, text: str, wait_after: float = 2.0):
         input_box.send_keys(Keys.ENTER)
         time.sleep(wait_after)
     except Exception as exc:
+        save_debug_screenshot(f"set-search-query-failed")
         logger.error(f"Failed to type search query '{text}': {exc}")
         raise
 
 
 def has_rd_100_result(active_driver, timeout: float = 2.0) -> bool:
-    """Return True if any current result contains an 'RD (100%)' button."""
+    """
+    Return True if there is an 'RD (100%)' match that is not a "Single" result card.
+
+    Valid cards are those labelled as "Complete ..." or "With extras ...".
+    """
     try:
-        WebDriverWait(active_driver, timeout).until(
-            EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'RD (100%)')]"))
+        grid_xpath = (
+            "//div[contains(@class,'grid-cols-1') and contains(@class,'gap-2') and contains(@class,'overflow-x-auto')]"
         )
-        logger.debug("Found an 'RD (100%)' result.")
-        return True
+        grid = WebDriverWait(active_driver, timeout).until(EC.presence_of_element_located((By.XPATH, grid_xpath)))
+
+        rd_elements = grid.find_elements(By.XPATH, ".//*[contains(normalize-space(), 'RD (100%)')]")
+        if not rd_elements:
+            return False
+
+        card_xpath = "ancestor::div[contains(@class,'overflow-hidden') and contains(@class,'rounded-lg')][1]"
+        status_xpath = (
+            ".//span[starts-with(normalize-space(),'Single') "
+            "or starts-with(normalize-space(),'Complete') "
+            "or starts-with(normalize-space(),'With extras') "
+            "or starts-with(normalize-space(),'With Extras')]"
+        )
+
+        for rd_el in rd_elements:
+            try:
+                card = rd_el.find_element(By.XPATH, card_xpath)
+            except NoSuchElementException:
+                continue
+
+            status_texts = []
+            for el in card.find_elements(By.XPATH, status_xpath):
+                text = (el.text or "").strip()
+                if text:
+                    status_texts.append(text)
+
+            if any(text.startswith("Single") for text in status_texts):
+                logger.debug("Found an 'RD (100%)' match on a Single card; ignoring.")
+                save_debug_screenshot("found-rd-100-single-ignored")
+                continue
+
+            if any(text.startswith("Complete") for text in status_texts) or any(
+                text.lower().startswith("with extras") for text in status_texts
+            ):
+                logger.debug("Found a valid 'RD (100%)' result (Complete/With extras).")
+                save_debug_screenshot("found-rd-100-valid")
+                return True
+
+            logger.debug("Found an 'RD (100%)' match but could not validate card status; ignoring.")
+            save_debug_screenshot("found-rd-100-unvalidated-ignored")
+
+        return False
     except TimeoutException:
         return False
 
@@ -350,4 +464,63 @@ def click_instant_rd_button(active_driver, *, whole_season: bool = False, timeou
         return False
     except ElementClickInterceptedException as exc:
         logger.warning(f"Unable to click '{label}': {exc}")
+        return False
+
+
+def ensure_with_extras_filter(active_driver, timeout: float = 5.0) -> bool:
+    """
+    Ensure the "With extras" filter chip is enabled.
+    Returns True if the chip is present (enabled or successfully clicked), else False.
+    """
+    xpath = "//span[normalize-space()='With extras' or normalize-space()='With Extras']"
+    try:
+        chip = WebDriverWait(active_driver, timeout).until(EC.presence_of_element_located((By.XPATH, xpath)))
+    except TimeoutException:
+        logger.debug("No 'With extras' filter chip found.")
+        return False
+
+    cls = (chip.get_attribute("class") or "").lower()
+    if "bg-blue-900" in cls:
+        return True
+
+    try:
+        chip = WebDriverWait(active_driver, timeout).until(EC.element_to_be_clickable((By.XPATH, xpath)))
+        chip.click()
+        time.sleep(1)
+        return True
+    except Exception as exc:
+        logger.warning(f"Failed to enable 'With extras' filter chip: {exc!r}")
+        save_debug_screenshot("with-extras-click-failed")
+        return False
+
+
+def click_first_instant_rd_in_result_cards(active_driver, timeout: float = 5.0) -> bool:
+    """
+    Click the first "Instant RD" button inside the result card grid.
+    This intentionally does not use the top banner buttons.
+    """
+    grid_xpath = (
+        "//div[contains(@class,'grid-cols-1') and contains(@class,'gap-2') and contains(@class,'overflow-x-auto')]"
+    )
+    try:
+        grid = WebDriverWait(active_driver, timeout).until(EC.presence_of_element_located((By.XPATH, grid_xpath)))
+        buttons = grid.find_elements(By.XPATH, ".//button[.//b[normalize-space()='Instant RD']]")
+        for button in buttons:
+            try:
+                if not button.is_displayed():
+                    continue
+                active_driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
+                WebDriverWait(active_driver, timeout).until(lambda d: button.is_enabled())
+                button.click()
+                logger.info("Clicked 'Instant RD' from result card grid.")
+                return True
+            except Exception:
+                continue
+
+        logger.debug("No 'Instant RD' buttons found inside result card grid.")
+        save_debug_screenshot("no-instant-rd-in-cards")
+        return False
+    except TimeoutException:
+        logger.debug("Result card grid not found.")
+        save_debug_screenshot("missing-result-grid")
         return False

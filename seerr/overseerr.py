@@ -18,6 +18,38 @@ STATUS_LABELS = {
     5: "AVAILABLE",
 }
 
+_TITLE_CACHE: dict[tuple[str, int], str] = {}
+
+
+def _resolve_title(media: dict, media_type: str, tmdb_id: Any) -> str:
+    """
+    Overseerr's /request endpoint doesn't always include a title/name on the media object.
+    For logging, fall back to a Trakt lookup when needed.
+    """
+    title = media.get("title") or media.get("name")
+    if title:
+        return str(title)
+
+    try:
+        tmdb_int = int(tmdb_id)
+    except (TypeError, ValueError):
+        return "Untitled"
+
+    cache_key = (media_type.lower(), tmdb_int)
+    cached = _TITLE_CACHE.get(cache_key)
+    if cached:
+        return cached
+
+    try:
+        from seerr.trakt import get_media_details_from_trakt
+
+        details = get_media_details_from_trakt(str(tmdb_int), media_type.lower())
+        resolved = (details or {}).get("title") or "Untitled"
+        _TITLE_CACHE[cache_key] = resolved
+        return resolved
+    except Exception:
+        return "Untitled"
+
 def get_overseerr_media_requests() -> list[dict]:
     """
     Fetch pending media requests from Overseerr.
@@ -68,8 +100,8 @@ def _format_pending_summary(items: List[dict]) -> str:
         media_type = (media.get("mediaType") or "unknown").upper()
         status_code = media.get("status")
         status_label = STATUS_LABELS.get(status_code, f"STATUS_{status_code}")
-        title = media.get("title") or media.get("name") or "Untitled"
         tmdb_id = media.get("tmdbId", "n/a")
+        title = _resolve_title(media, media_type, tmdb_id)
         request_id = item.get("id", "n/a")
 
         season_suffix = ""

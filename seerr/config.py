@@ -87,10 +87,28 @@ load_config()
 def update_env_file():
     """Update the .env file with the new access token."""
     try:
-        with open('.env', 'r', encoding='utf-8') as file:
+        env_file_candidates = []
+        explicit_env_file = os.getenv("ENV_FILE")
+        if explicit_env_file:
+            env_file_candidates.append(explicit_env_file)
+        # Common container/workdir locations.
+        env_file_candidates.extend(["/app/.env", ".env"])
+
+        env_file_path = next(
+            (path for path in env_file_candidates if path and os.path.exists(path)),
+            None,
+        )
+        if not env_file_path:
+            logger.warning(
+                "Skipping .env update; no env file found at: "
+                + ", ".join(p for p in env_file_candidates if p)
+            )
+            return False
+
+        with open(env_file_path, 'r', encoding='utf-8') as file:
             lines = file.readlines()
         
-        with open('.env', 'w', encoding='utf-8') as file:
+        with open(env_file_path, 'w', encoding='utf-8') as file:
             for line in lines:
                 if line.startswith('RD_ACCESS_TOKEN'):
                     file.write(f'RD_ACCESS_TOKEN={RD_ACCESS_TOKEN}\n')

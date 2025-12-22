@@ -14,6 +14,8 @@ from seerr import browser as browser_module
 from seerr.browser import (
     click_instant_rd_button,
     click_show_more_results,
+    click_first_instant_rd_in_result_cards,
+    ensure_with_extras_filter,
     has_rd_100_result,
     set_search_query,
 )
@@ -116,10 +118,10 @@ def _process_show_season(item: MediaWorkItem, season: int, active_driver) -> boo
     logger.info(f"Opened {item.title} season {season} page ({url}).")
 
     _prepare_results_area(active_driver)
-    hundred_found, clicked = _show_search_loop(active_driver)
-    if hundred_found:
-        detail = " via Instant RD (Whole Season)" if clicked else ""
-        logger.success(f"Season {season} for '{item.title}' complete{detail}.")
+    complete, method = _show_search_loop(active_driver)
+    if complete:
+        suffix = f" via {method}" if method else ""
+        logger.success(f"Season {season} for '{item.title}' complete{suffix}.")
         return True
 
     logger.warning(f"Season {season} for '{item.title}' incomplete.")
@@ -138,7 +140,41 @@ def _movie_search_loop(active_driver):
 
 
 def _show_search_loop(active_driver):
-    return _run_search_tiers(active_driver, whole_season=True)
+    found_any, clicked_any = _run_search_tiers(active_driver, whole_season=True)
+    if found_any:
+        method = "Instant RD (Whole Season)" if clicked_any else ""
+        return True, method
+
+    # Backup: enable "With extras" filter and click the first Instant RD in result cards.
+    if _run_with_extras_instant_rd_tiers(active_driver):
+        return True, "Instant RD (With extras)"
+
+    return False, ""
+
+
+def _run_with_extras_instant_rd_tiers(active_driver) -> bool:
+    """Retry the same search tiers, but use the 'With extras' filter + card Instant RD click."""
+    total_tiers = len(SEARCH_PATTERNS)
+    for tier_index, tier_patterns in enumerate(SEARCH_PATTERNS, start=1):
+        logger.debug(f"Starting WITH-EXTRAS search tier {tier_index}/{total_tiers} ({len(tier_patterns)} patterns).")
+        for pattern in tier_patterns:
+            logger.debug(f"WITH-EXTRAS searching grid with pattern: {pattern}")
+            try:
+                set_search_query(active_driver, pattern)
+            except Exception as exc:
+                logger.error(f"Failed to type search pattern '{pattern}': {exc}")
+                continue
+
+            # Enable the filter chip once results are present.
+            ensure_with_extras_filter(active_driver)
+            time.sleep(1)
+
+            if click_first_instant_rd_in_result_cards(active_driver):
+                time.sleep(5)
+                return True
+
+        logger.debug(f"WITH-EXTRAS search tier {tier_index} completed without Instant RD clicks.")
+    return False
 
 
 def _run_search_tiers(active_driver, *, whole_season: bool):

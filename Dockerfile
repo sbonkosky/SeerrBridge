@@ -25,16 +25,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN arch=$(uname -m) && \
     if [ "$arch" = "x86_64" ]; then \
         PLATFORM="linux64" && \
-        CHROME_VERSION=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json" | \
-        jq -r '.channels.Stable.version') && \
-        CHROME_URL=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json" | \
-        jq -r ".channels.Stable.downloads.chrome[] | select(.platform == \"$PLATFORM\") | .url") && \
+        CFT_JSON_URL="https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json" && \
+        CHROME_VERSION=$(curl -s "$CFT_JSON_URL" | jq -r '.channels.Stable.version') && \
+        CHROME_URL=$(curl -s "$CFT_JSON_URL" | jq -r ".channels.Stable.downloads.chrome[] | select(.platform == \"$PLATFORM\") | .url") && \
+        CHROMEDRIVER_URL=$(curl -s "$CFT_JSON_URL" | jq -r ".channels.Stable.downloads.chromedriver[] | select(.platform == \"$PLATFORM\") | .url") && \
         echo "Downloading Chrome version ${CHROME_VERSION} for $PLATFORM from: $CHROME_URL" && \
         wget -O /tmp/chrome-$PLATFORM.zip $CHROME_URL && \
         unzip /tmp/chrome-$PLATFORM.zip -d /opt/ && \
         mv /opt/chrome-$PLATFORM /opt/chrome && \
         ln -sf /opt/chrome/chrome /usr/bin/google-chrome && \
-        chmod +x /usr/bin/google-chrome; \
+        chmod +x /usr/bin/google-chrome && \
+        echo "Downloading ChromeDriver version ${CHROME_VERSION} for $PLATFORM from: $CHROMEDRIVER_URL" && \
+        wget -O /tmp/chromedriver-$PLATFORM.zip $CHROMEDRIVER_URL && \
+        unzip /tmp/chromedriver-$PLATFORM.zip -d /opt/ && \
+        mv /opt/chromedriver-$PLATFORM /opt/chromedriver && \
+        ln -sf /opt/chromedriver/chromedriver /usr/local/bin/chromedriver && \
+        chmod +x /usr/local/bin/chromedriver; \
     elif [ "$arch" = "aarch64" ]; then \
         echo "deb http://deb.debian.org/debian bullseye main" > /etc/apt/sources.list && \
         echo "deb http://deb.debian.org/debian-security bullseye-security main" >> /etc/apt/sources.list && \
@@ -50,6 +56,7 @@ RUN arch=$(uname -m) && \
 ENV CHROME_BIN=/usr/bin/google-chrome
 ENV CHROME_DRIVER_PATH=/usr/local/bin/chromedriver
 ENV RUNNING_IN_DOCKER=true
+ENV SCREENSHOTS_DIR=/app/screenshots
 # Copy requirements and install them
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
